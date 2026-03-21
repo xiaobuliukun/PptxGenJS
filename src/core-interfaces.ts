@@ -104,7 +104,12 @@ export interface BorderProps {
 	 */
 	color?: HexColor
 
-	// TODO: add `transparency` prop to Borders (0-100%)
+	/**
+	 * Transparency (percent)
+	 * - range: 0-100
+	 * @default 0
+	 */
+	transparency?: number
 
 	// TODO: add `width` - deprecate `pt`
 	/**
@@ -171,6 +176,16 @@ export interface ShadowProps {
 	 */
 	rotateWithShape?: boolean
 }
+
+export interface SoftEdgeProps {
+	/**
+	 * Soft edge radius (points)
+	 * - range: 0-100
+	 * @default 0
+	 */
+	radius?: number
+}
+
 // used by: shape, table, text
 export interface GradientStop {
 	/**
@@ -231,6 +246,19 @@ export interface LinearGradientShapeFillProps extends BaseGradientShapeFillProps
 	 * Fill type
 	 */
 	type: 'linearGradient'
+}
+export interface RadialGradientShapeFillProps extends BaseGradientShapeFillProps {
+	/**
+	 * Fill type
+	 */
+	type: 'radialGradient'
+	/**
+	 * Gradient style
+	 * - 'circle' (default): circular gradient
+	 * - 'ellipse': elliptical gradient (stretches with shape)
+	 * @default 'ellipse'
+	 */
+	style?: 'circle' | 'ellipse'
 }
 export interface SolidShapeFillProps {
 	/**
@@ -412,7 +440,7 @@ export interface TextBaseProps {
 	 * @example 'FF0000' // hex color (red)
 	 * @example pptx.SchemeColor.text1 // Theme color (Text1)
 	 */
-	color?: Color
+	color?: Color | LinearGradientShapeFillProps | RadialGradientShapeFillProps
 	/**
 	 * Font face name
 	 * @example 'Arial' // Arial font
@@ -751,6 +779,11 @@ export interface ShapeProps extends PositionProps, ObjectNameProps {
 	 * TODO: need new demo.js entry for shape shadow
 	 */
 	shadow?: ShadowProps
+
+	/**
+	 * Soft edge options
+	 */
+	softEdge?: SoftEdgeProps
 
 	/**
 	 * @deprecated v3.3.0
@@ -1117,8 +1150,12 @@ export interface TextPropsOptions extends PositionProps, DataOrPathProps, TextBa
 	 * @example 10 // Top/Right/Bottom/Left margin 10 [0.14" in powerpoint]
 	 * @example [10,5,10,5] // Top margin 10, Right margin 5, Bottom margin 10, Left margin 5
 	 */
-	margin?: Margin
-	outline?: { color: Color, size: number }
+	/**
+	 * Text outline options
+	 * - PowerPoint: Format Shape > Text Options > Text Outline
+	 * @example outline: { color:'FF0000', size:1.5, transparency:50 }
+	 */
+	outline?: { color: Color, size: number, transparency?: number }
 	paraSpaceAfter?: number
 	paraSpaceBefore?: number
 	placeholder?: string
@@ -1671,7 +1708,7 @@ export interface IChartOpts
 	IChartPropsDataLabel,
 	IChartPropsDataTable,
 	IChartPropsLegend,
-	IChartPropsTitle,
+	Omit<IChartPropsTitle, 'color'>,
 	ObjectNameProps,
 	OptsChartGridLine,
 	PositionProps {

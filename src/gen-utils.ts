@@ -3,7 +3,18 @@
  */
 
 import { EMU, REGEX_HEX_COLOR, DEF_FONT_COLOR, ONEPT, SchemeColor, SCHEME_COLORS } from './core-enums'
-import { PresLayout, TextGlowProps, PresSlide, SolidShapeFillProps, Color, ShapeLineProps, Coord, ShadowProps, LinearGradientShapeFillProps } from './core-interfaces'
+import {
+	PresLayout,
+	TextGlowProps,
+	PresSlide,
+	SolidShapeFillProps,
+	Color,
+	ShapeLineProps,
+	Coord,
+	ShadowProps,
+	LinearGradientShapeFillProps,
+	RadialGradientShapeFillProps,
+} from './core-interfaces'
 
 /**
  * Translates any type of `x`/`y`/`w`/`h` prop to EMU
@@ -185,14 +196,14 @@ export function createGlowElement (options: TextGlowProps, defaults: TextGlowPro
  * @param {Color | ShapeFillProps | ShapeLineProps} props fill props
  * @returns XML string
  */
-export function genXmlColorSelection (props: Color | SolidShapeFillProps | ShapeLineProps | LinearGradientShapeFillProps): string {
+export function genXmlColorSelection (props: Color | SolidShapeFillProps | ShapeLineProps | LinearGradientShapeFillProps | RadialGradientShapeFillProps): string {
 	if (!props) {
 		return ''
 	}
 
 	let outText = ''
 
-	let safeProps: SolidShapeFillProps | ShapeLineProps | LinearGradientShapeFillProps = {}
+	let safeProps: SolidShapeFillProps | ShapeLineProps | LinearGradientShapeFillProps | RadialGradientShapeFillProps = {}
 	if (typeof props === 'string') {
 		safeProps.type = 'solid'
 		safeProps.color = props
@@ -211,7 +222,8 @@ export function genXmlColorSelection (props: Color | SolidShapeFillProps | Shape
 			break
 		}
 
-		case 'linearGradient': {
+		case 'linearGradient':
+		case 'radialGradient': {
 			const stops = safeProps.stops ?? []
 			const rotWithShape = safeProps.rotWithShape ?? true
 			const flip = safeProps.flip ?? 'none'
@@ -227,17 +239,24 @@ export function genXmlColorSelection (props: Color | SolidShapeFillProps | Shape
 							? `<a:alpha val="${Math.round((100 - transparency) * 1000)}"/>`
 							: ''
 
-						return `<a:gs pos="${position * 1000}">${createColorElement(stopColor, stopInternalElements)}</a:gs>`
+						return `<a:gs pos="${Math.round(position * 1000)}">${createColorElement(stopColor, stopInternalElements)}</a:gs>`
 					}
 				).join('')
 
 				outText += '</a:gsLst>'
 			}
 
-			if (safeProps.angle) {
-				const ang = convertRotationDegrees(safeProps.angle)
-				const scaled = safeProps.scaled ?? false
-				outText += `<a:lin ang="${ang}" scaled="${scaled ? 1 : 0}"/>`
+			if (safeProps.type === 'linearGradient') {
+				if (safeProps.angle) {
+					const ang = convertRotationDegrees(safeProps.angle)
+					const scaled = safeProps.scaled ?? false
+					outText += `<a:lin ang="${ang}" scaled="${scaled ? 1 : 0}"/>`
+				}
+			} else {
+				// Radial Gradient
+				const style = (safeProps as RadialGradientShapeFillProps).style ?? 'ellipse'
+				const pathName = style === 'circle' ? 'circle' : 'rect'
+				outText += `<a:path path="${pathName}"><a:fillToRect l="50000" t="50000" r="50000" b="50000"/></a:path>`
 			}
 
 			if (

@@ -1915,6 +1915,7 @@ function genXmlTitle (opts: IChartPropsTitle, chartX?: number, chartY?: number):
 	const rotate = opts.titleRotate ? `<a:bodyPr rot="${convertRotationDegrees(opts.titleRotate)}"/>` : '<a:bodyPr/>' // don't specify rotation to get default (ex. vertical for cat axis)
 	const sizeAttr = opts.fontSize ? `sz="${Math.round(opts.fontSize * 100)}"` : '' // only set the font size if specified.  Powerpoint will handle the default size
 	const titleBold = opts.titleBold ? 1 : 0
+	const titleColor = typeof opts.color === 'string' ? opts.color : DEF_FONT_COLOR
 
 	let layout = '<c:layout/>'
 	if (opts.titlePos && typeof opts.titlePos.x === 'number' && typeof opts.titlePos.y === 'number') {
@@ -1938,13 +1939,13 @@ function genXmlTitle (opts: IChartPropsTitle, chartX?: number, chartY?: number):
           <a:p>
             ${align}
             <a:defRPr ${sizeAttr} b="${titleBold}" i="0" u="none" strike="noStrike">
-              <a:solidFill>${createColorElement(opts.color || DEF_FONT_COLOR)}</a:solidFill>
+              <a:solidFill>${createColorElement(titleColor)}</a:solidFill>
               <a:latin typeface="${opts.fontFace || 'Arial'}"/>
             </a:defRPr>
           </a:pPr>
           <a:r>
             <a:rPr ${sizeAttr} b="${titleBold}" i="0" u="none" strike="noStrike">
-              <a:solidFill>${createColorElement(opts.color || DEF_FONT_COLOR)}</a:solidFill>
+              <a:solidFill>${createColorElement(titleColor)}</a:solidFill>
               <a:latin typeface="${opts.fontFace || 'Arial'}"/>
             </a:rPr>
             <a:t>${encodeXmlEntities(opts.title) || ''}</a:t>

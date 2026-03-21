@@ -353,7 +353,12 @@ function slideObjectToXml (slide: PresSlide | SlideLayout): string {
 							].forEach(obj => {
 								if (cellOpts.border[obj.idx].type !== 'none') {
 									strXml += `<a:${obj.name} w="${valToPts(cellOpts.border[obj.idx].pt)}" cap="flat" cmpd="sng" algn="ctr">`
-									strXml += `<a:solidFill>${createColorElement(cellOpts.border[obj.idx].color)}</a:solidFill>`
+									strXml += `<a:solidFill>${createColorElement(
+										cellOpts.border[obj.idx].color,
+										cellOpts.border[obj.idx].transparency
+											? `<a:alpha val="${Math.round((100 - cellOpts.border[obj.idx].transparency) * 1000)}"/>`
+											: ''
+									)}</a:solidFill>`
 									strXml += `<a:prstDash val="${cellOpts.border[obj.idx].type === 'dash' ? 'sysDash' : 'solid'
 									}"/><a:round/><a:headEnd type="none" w="med" len="med"/><a:tailEnd type="none" w="med" len="med"/>`
 									strXml += `</a:${obj.name}>`
@@ -515,20 +520,28 @@ function slideObjectToXml (slide: PresSlide | SlideLayout): string {
 					strSlideXml += '</a:ln>'
 				}
 
-				// EFFECTS > SHADOW: REF: @see http://officeopenxml.com/drwSp-effects.php
-				if (slideItemObj.options.shadow && slideItemObj.options.shadow.type !== 'none') {
-					slideItemObj.options.shadow.type = slideItemObj.options.shadow.type || 'outer'
-					slideItemObj.options.shadow.blur = valToPts(slideItemObj.options.shadow.blur || 8)
-					slideItemObj.options.shadow.offset = valToPts(slideItemObj.options.shadow.offset || 4)
-					slideItemObj.options.shadow.angle = Math.round((slideItemObj.options.shadow.angle || 270) * 60000)
-					slideItemObj.options.shadow.opacity = Math.round((slideItemObj.options.shadow.opacity || 0.75) * 100000)
-					slideItemObj.options.shadow.color = slideItemObj.options.shadow.color || DEF_TEXT_SHADOW.color
-
+				// EFFECTS: SHADOW / SOFT EDGE (REF: http://officeopenxml.com/drwSp-effects.php)
+				const hasShadow = slideItemObj.options.shadow && slideItemObj.options.shadow.type !== 'none'
+				const softEdgeRadius = typeof slideItemObj.options.softEdge?.radius === 'number' ? slideItemObj.options.softEdge.radius : 0
+				const hasSoftEdge = softEdgeRadius > 0
+				if (hasShadow || hasSoftEdge) {
 					strSlideXml += '<a:effectLst>'
-					strSlideXml += ` <a:${slideItemObj.options.shadow.type}Shdw ${slideItemObj.options.shadow.type === 'outer' ? 'sx="100000" sy="100000" kx="0" ky="0" algn="bl" rotWithShape="0"' : ''} blurRad="${slideItemObj.options.shadow.blur}" dist="${slideItemObj.options.shadow.offset}" dir="${slideItemObj.options.shadow.angle}">`
-					strSlideXml += ` <a:srgbClr val="${slideItemObj.options.shadow.color}">`
-					strSlideXml += ` <a:alpha val="${slideItemObj.options.shadow.opacity}"/></a:srgbClr>`
-					strSlideXml += ' </a:outerShdw>'
+					if (hasShadow) {
+						slideItemObj.options.shadow.type = slideItemObj.options.shadow.type || 'outer'
+						slideItemObj.options.shadow.blur = valToPts(slideItemObj.options.shadow.blur || 8)
+						slideItemObj.options.shadow.offset = valToPts(slideItemObj.options.shadow.offset || 4)
+						slideItemObj.options.shadow.angle = Math.round((slideItemObj.options.shadow.angle || 270) * 60000)
+						slideItemObj.options.shadow.opacity = Math.round((slideItemObj.options.shadow.opacity || 0.75) * 100000)
+						slideItemObj.options.shadow.color = slideItemObj.options.shadow.color || DEF_TEXT_SHADOW.color
+
+						strSlideXml += ` <a:${slideItemObj.options.shadow.type}Shdw ${slideItemObj.options.shadow.type === 'outer' ? 'sx="100000" sy="100000" kx="0" ky="0" algn="bl" rotWithShape="0"' : ''} blurRad="${slideItemObj.options.shadow.blur}" dist="${slideItemObj.options.shadow.offset}" dir="${slideItemObj.options.shadow.angle}">`
+						strSlideXml += ` <a:srgbClr val="${slideItemObj.options.shadow.color}">`
+						strSlideXml += ` <a:alpha val="${slideItemObj.options.shadow.opacity}"/></a:srgbClr>`
+						strSlideXml += ' </a:outerShdw>'
+					}
+					if (hasSoftEdge) {
+						strSlideXml += `<a:softEdge rad="${valToPts(softEdgeRadius)}"/>`
+					}
 					strSlideXml += '</a:effectLst>'
 				}
 
@@ -987,9 +1000,19 @@ function genXmlTextRunProperties (opts: ObjectOptions | TextPropsOptions, isDefa
 	// Color / Font / Highlight / Outline are children of <a:rPr>, so add them now before closing the runProperties tag
 	if (opts.color || opts.fontFace || opts.outline || (typeof opts.underline === 'object' && opts.underline.color)) {
 		if (opts.outline && typeof opts.outline === 'object') {
-			runProps += `<a:ln w="${valToPts(opts.outline.size || 0.75)}">${genXmlColorSelection(opts.outline.color || 'FFFFFF')}</a:ln>`
+			runProps += `<a:ln w="${valToPts(opts.outline.size || 0.75)}">${genXmlColorSelection({
+				color: opts.outline.color || 'FFFFFF',
+				transparency: opts.outline.transparency,
+			})}</a:ln>`
 		}
-		if (opts.color) runProps += genXmlColorSelection({ color: opts.color, transparency: opts.transparency })
+		if (opts.color) {
+			if (typeof opts.color === 'string') {
+				runProps += genXmlColorSelection({ color: opts.color, transparency: opts.transparency })
+			} else {
+				// @ts-ignore
+				runProps += genXmlColorSelection(opts.color)
+			}
+		}
 		if (opts.highlight) runProps += `<a:highlight>${createColorElement(opts.highlight)}</a:highlight>`
 		if (typeof opts.underline === 'object' && opts.underline.color) runProps += `<a:uFill>${genXmlColorSelection(opts.underline.color)}</a:uFill>`
 		if (opts.glow) runProps += `<a:effectLst>${createGlowElement(opts.glow, DEF_TEXT_GLOW)}</a:effectLst>`

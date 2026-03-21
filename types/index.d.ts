@@ -999,6 +999,15 @@ declare namespace PptxGenJS {
 		 */
 		rotateWithShape?: boolean
 	}
+
+	export interface SoftEdgeProps {
+		/**
+		 * Soft edge radius (points)
+		 * - range: 0-100
+		 * @default 0
+		 */
+		radius?: number
+	}
 	// used by: shape, table, text
 	export interface ShapeFillProps {
 		/**
@@ -1519,6 +1528,11 @@ declare namespace PptxGenJS {
 		 * TODO: need new demo.js entry for shape shadow
 		 */
 		shadow?: ShadowProps
+
+		/**
+		 * Soft edge options
+		 */
+		softEdge?: SoftEdgeProps
 
 		/**
 		 * @deprecated v3.3.0
