@@ -571,6 +571,7 @@ export function addMediaDefinition(target: PresSlide, opt: MediaProps): void {
 	// STEP 2: Set type, media
 	slideData.mtype = strType
 	slideData.media = strPath || 'preencoded.mov'
+	slideData.mediaAutoplay = opt.autoplay === true
 	slideData.options = {}
 
 	// STEP 3: Set media properties & options

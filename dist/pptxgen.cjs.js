@@ -1,4 +1,4 @@
-/* PptxGenJS 4.0.1 @ 2025-06-25T23:35:35.096Z */
+/* PptxGenJS 4.0.1 @ 2026-04-21T14:26:12.513Z */
 'use strict';
 
 var JSZip = require('jszip');
@@ -47,7 +47,7 @@ const LAYOUT_IDX_SERIES_BASE = 2147483649;
 const REGEX_HEX_COLOR = /^[0-9a-fA-F]{6}$/;
 const LINEH_MODIFIER = 1.67; // AKA: Golden Ratio Typography
 const DEF_BULLET_MARGIN = 27;
-const DEF_CELL_BORDER = { type: 'solid', color: '666666', pt: 1 };
+const DEF_CELL_BORDER = { type: 'solid', color: '666666', pt: 1, transparency: 0 };
 const DEF_CELL_MARGIN_IN = [0.05, 0.1, 0.05, 0.1]; // "Normal" margins in PPT-2021 ("Narrow" is `0.05` for all 4)
 const DEF_CHART_BORDER = { color: '363636', pt: 1 };
 const DEF_CHART_GRIDLINE = { color: '888888', style: 'solid', size: 1, cap: 'flat' };
@@ -786,31 +786,75 @@ function createGlowElement(options, defaults) {
  * @returns XML string
  */
 function genXmlColorSelection(props) {
-    let fillType = 'solid';
-    let colorVal = '';
-    let internalElements = '';
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    if (!props) {
+        return '';
+    }
     let outText = '';
-    if (props) {
-        if (typeof props === 'string')
-            colorVal = props;
-        else {
-            if (props.type)
-                fillType = props.type;
-            if (props.color)
-                colorVal = props.color;
-            if (props.alpha)
-                internalElements += `<a:alpha val="${Math.round((100 - props.alpha) * 1000)}"/>`; // DEPRECATED: @deprecated v3.3.0
-            if (props.transparency)
-                internalElements += `<a:alpha val="${Math.round((100 - props.transparency) * 1000)}"/>`;
+    let safeProps = {};
+    if (typeof props === 'string') {
+        safeProps.type = 'solid';
+        safeProps.color = props;
+    }
+    else {
+        safeProps = props;
+        safeProps.type = (_a = props.type) !== null && _a !== void 0 ? _a : 'solid';
+    }
+    switch (safeProps.type) {
+        case 'solid': {
+            const transparency = (_b = safeProps.transparency) !== null && _b !== void 0 ? _b : safeProps.alpha;
+            const internalElements = transparency
+                ? `<a:alpha val="${Math.round((100 - transparency) * 1000)}"/>`
+                : undefined;
+            outText += `<a:solidFill>${createColorElement((_c = safeProps.color) !== null && _c !== void 0 ? _c : '', internalElements)}</a:solidFill>`;
+            break;
         }
-        switch (fillType) {
-            case 'solid':
-                outText += `<a:solidFill>${createColorElement(colorVal, internalElements)}</a:solidFill>`;
-                break;
-            default: // @note need a statement as having only "break" is removed by rollup, then tiggers "no-default" js-linter
-                outText += '';
-                break;
+        case 'linearGradient':
+        case 'radialGradient': {
+            const stops = (_d = safeProps.stops) !== null && _d !== void 0 ? _d : [];
+            const rotWithShape = (_e = safeProps.rotWithShape) !== null && _e !== void 0 ? _e : true;
+            const flip = (_f = safeProps.flip) !== null && _f !== void 0 ? _f : 'none';
+            outText += `<a:gradFill rotWithShape="${rotWithShape ? 1 : 0}" flip="${flip}">`;
+            if (stops.length > 0) {
+                outText += '<a:gsLst>';
+                outText += stops.map(({ position, color: stopColor, transparency }) => {
+                    const stopInternalElements = transparency
+                        ? `<a:alpha val="${Math.round((100 - transparency) * 1000)}"/>`
+                        : '';
+                    return `<a:gs pos="${Math.round(position * 1000)}">${createColorElement(stopColor, stopInternalElements)}</a:gs>`;
+                }).join('');
+                outText += '</a:gsLst>';
+            }
+            if (safeProps.type === 'linearGradient') {
+                if (safeProps.angle) {
+                    const ang = convertRotationDegrees(safeProps.angle);
+                    const scaled = (_g = safeProps.scaled) !== null && _g !== void 0 ? _g : false;
+                    outText += `<a:lin ang="${ang}" scaled="${scaled ? 1 : 0}"/>`;
+                }
+            }
+            else {
+                // Radial Gradient
+                const style = (_h = safeProps.style) !== null && _h !== void 0 ? _h : 'ellipse';
+                const pathName = style === 'circle' ? 'circle' : 'rect';
+                outText += `<a:path path="${pathName}"><a:fillToRect l="50000" t="50000" r="50000" b="50000"/></a:path>`;
+            }
+            if (safeProps.tileRect &&
+                (safeProps.tileRect.t ||
+                    safeProps.tileRect.r ||
+                    safeProps.tileRect.b ||
+                    safeProps.tileRect.l)) {
+                const tAttr = safeProps.tileRect.t ? `t="${safeProps.tileRect.t * 1000}"` : '';
+                const rAttr = safeProps.tileRect.r ? `r="${safeProps.tileRect.r * 1000}"` : '';
+                const bAttr = safeProps.tileRect.b ? `b="${safeProps.tileRect.b * 1000}"` : '';
+                const lAttr = safeProps.tileRect.l ? `l="${safeProps.tileRect.l * 1000}"` : '';
+                outText += `<a:tileRect ${tAttr} ${rAttr} ${bAttr} ${lAttr}/>`;
+            }
+            outText += '</a:gradFill>';
+            break;
         }
+        default: // @note need a statement as having only "break" is removed by rollup, then tiggers "no-default" js-linter
+            outText += '';
+            break;
     }
     return outText;
 }
@@ -1852,8 +1896,14 @@ function addChartDefinition(target, type, data, opt) {
     if (options.border)
         options.plotArea.border = options.border; // @deprecated [[remove in v4.0]]
     options.plotArea.fill = options.plotArea.fill || { color: null, transparency: null };
-    if (options.fill)
-        options.plotArea.fill.color = options.fill; // @deprecated [[remove in v4.0]]
+    if (options.fill) {
+        const fill = {
+            type: 'solid',
+            color: options.fill, // @deprecated [[remove in v4.0]]
+            transparency: null,
+        };
+        options.plotArea.fill = fill;
+    }
     //
     options.chartArea = options.chartArea || {};
     options.chartArea.border = options.chartArea.border && typeof options.chartArea.border === 'object' ? options.chartArea.border : null;
@@ -2092,6 +2142,7 @@ function addMediaDefinition(target, opt) {
     // STEP 2: Set type, media
     slideData.mtype = strType;
     slideData.media = strPath || 'preencoded.mov';
+    slideData.mediaAutoplay = opt.autoplay === true;
     slideData.options = {};
     // STEP 3: Set media properties & options
     slideData.options.x = intPosX;
@@ -2318,6 +2369,7 @@ function addTableDefinition(target, tableRows, options, slideLayout, presLayout,
                         type: newCell.options.border[idx].type || DEF_CELL_BORDER.type,
                         color: newCell.options.border[idx].color || DEF_CELL_BORDER.color,
                         pt: typeof newCell.options.border[idx].pt === 'number' ? newCell.options.border[idx].pt : DEF_CELL_BORDER.pt,
+                        transparency: typeof newCell.options.border[idx].transparency === 'number' ? newCell.options.border[idx].transparency : DEF_CELL_BORDER.transparency,
                     };
                 });
                 // LAST:
@@ -2351,7 +2403,12 @@ function addTableDefinition(target, tableRows, options, slideLayout, presLayout,
     else if (Array.isArray(opt.border)) {
         [0, 1, 2, 3].forEach(idx => {
             opt.border[idx] = opt.border[idx]
-                ? { type: opt.border[idx].type || DEF_CELL_BORDER.type, color: opt.border[idx].color || DEF_CELL_BORDER.color, pt: opt.border[idx].pt || DEF_CELL_BORDER.pt }
+                ? {
+                    type: opt.border[idx].type || DEF_CELL_BORDER.type,
+                    color: opt.border[idx].color || DEF_CELL_BORDER.color,
+                    pt: opt.border[idx].pt || DEF_CELL_BORDER.pt,
+                    transparency: opt.border[idx].transparency || DEF_CELL_BORDER.transparency,
+                }
                 : { type: 'none' };
         });
     }
@@ -2776,8 +2833,9 @@ class Slide {
         this._slideNumberProps = ((_a = this._slideLayout) === null || _a === void 0 ? void 0 : _a._slideNumberProps) ? this._slideLayout._slideNumberProps : null;
     }
     set bkgd(value) {
+        var _a;
         this._bkgd = value;
-        if (!this._background || !this._background.color) {
+        if (!((_a = this._background) === null || _a === void 0 ? void 0 : _a.color)) {
             if (!this._background)
                 this._background = {};
             if (typeof value === 'string')
@@ -3384,7 +3442,7 @@ function createExcelWorksheet(chartObject, zip) {
  * @return {string} XML
  */
 function makeXmlCharts(rel) {
-    var _a, _b, _c, _d;
+    var _a, _b;
     let strXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
     let usesSecondaryValAxis = false;
     // STEP 1: Create chart
@@ -3519,7 +3577,9 @@ function makeXmlCharts(rel) {
         }
         strXml += '  <c:spPr>';
         // OPTION: Fill
-        strXml += ((_c = rel.opts.plotArea.fill) === null || _c === void 0 ? void 0 : _c.color) ? genXmlColorSelection(rel.opts.plotArea.fill) : '<a:noFill/>';
+        strXml += rel.opts.plotArea.fill.type === 'solid' || rel.opts.plotArea.fill.type === 'linearGradient'
+            ? genXmlColorSelection(rel.opts.plotArea.fill)
+            : '<a:noFill/>';
         // OPTION: Border
         strXml += rel.opts.plotArea.border
             ? `<a:ln w="${valToPts(rel.opts.plotArea.border.pt)}" cap="flat">${genXmlColorSelection(rel.opts.plotArea.border.color)}</a:ln>`
@@ -3564,7 +3624,9 @@ function makeXmlCharts(rel) {
     strXml += '</c:chart>';
     // D: CHARTSPACE SHAPE PROPS
     strXml += '<c:spPr>';
-    strXml += ((_d = rel.opts.chartArea.fill) === null || _d === void 0 ? void 0 : _d.color) ? genXmlColorSelection(rel.opts.chartArea.fill) : '<a:noFill/>';
+    strXml += rel.opts.chartArea.fill.type === 'solid' || rel.opts.chartArea.fill.type === 'linearGradient'
+        ? genXmlColorSelection(rel.opts.chartArea.fill)
+        : '<a:noFill/>';
     strXml += rel.opts.chartArea.border
         ? `<a:ln w="${valToPts(rel.opts.chartArea.border.pt)}" cap="flat">${genXmlColorSelection(rel.opts.chartArea.border.color)}</a:ln>`
         : '<a:ln><a:noFill/></a:ln>';
@@ -4696,6 +4758,7 @@ function genXmlTitle(opts, chartX, chartY) {
     const rotate = opts.titleRotate ? `<a:bodyPr rot="${convertRotationDegrees(opts.titleRotate)}"/>` : '<a:bodyPr/>'; // don't specify rotation to get default (ex. vertical for cat axis)
     const sizeAttr = opts.fontSize ? `sz="${Math.round(opts.fontSize * 100)}"` : ''; // only set the font size if specified.  Powerpoint will handle the default size
     const titleBold = opts.titleBold ? 1 : 0;
+    const titleColor = typeof opts.color === 'string' ? opts.color : DEF_FONT_COLOR;
     let layout = '<c:layout/>';
     if (opts.titlePos && typeof opts.titlePos.x === 'number' && typeof opts.titlePos.y === 'number') {
         // NOTE: manualLayout x/y vals are *relative to entire slide*
@@ -4721,13 +4784,13 @@ function genXmlTitle(opts, chartX, chartY) {
           <a:p>
             ${align}
             <a:defRPr ${sizeAttr} b="${titleBold}" i="0" u="none" strike="noStrike">
-              <a:solidFill>${createColorElement(opts.color || DEF_FONT_COLOR)}</a:solidFill>
+              <a:solidFill>${createColorElement(titleColor)}</a:solidFill>
               <a:latin typeface="${opts.fontFace || 'Arial'}"/>
             </a:defRPr>
           </a:pPr>
           <a:r>
             <a:rPr ${sizeAttr} b="${titleBold}" i="0" u="none" strike="noStrike">
-              <a:solidFill>${createColorElement(opts.color || DEF_FONT_COLOR)}</a:solidFill>
+              <a:solidFill>${createColorElement(titleColor)}</a:solidFill>
               <a:latin typeface="${opts.fontFace || 'Arial'}"/>
             </a:rPr>
             <a:t>${encodeXmlEntities(opts.title) || ''}</a:t>
@@ -5113,7 +5176,7 @@ function slideObjectToXml(slide) {
     strSlideXml += '<a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>';
     // STEP 3: Loop over all Slide.data objects and add them to this slide
     slide._slideObjects.forEach((slideItemObj, idx) => {
-        var _a, _b, _c, _d, _e, _f, _g, _h;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j;
         let x = 0;
         let y = 0;
         let cx = getSmartParseNumber('75%', 'X', slide._presLayout);
@@ -5308,6 +5371,8 @@ function slideObjectToXml(slide) {
                             if (objTabOpts[name] && !cellOpts[name] && cellOpts[name] !== 0)
                                 cellOpts[name] = objTabOpts[name];
                         });
+                        if (typeof cellOpts.wrap !== 'boolean' && typeof objTabOpts.wrap === 'boolean')
+                            cellOpts.wrap = objTabOpts.wrap;
                         const cellValign = cellOpts.valign
                             ? ` anchor="${cellOpts.valign.replace(/^c$/i, 'ctr').replace(/^m$/i, 'ctr').replace('center', 'ctr').replace('middle', 'ctr').replace('top', 't').replace('btm', 'b').replace('bottom', 'b')}"`
                             : '';
@@ -5333,7 +5398,6 @@ function slideObjectToXml(slide) {
                         else {
                             cellMarginXml = ` marL="${inch2Emu(cellMargin[3])}" marR="${inch2Emu(cellMargin[1])}" marT="${inch2Emu(cellMargin[0])}" marB="${inch2Emu(cellMargin[2])}"`;
                         }
-                        // FUTURE: Cell NOWRAP property (textwrap: add to a:tcPr (horzOverflow="overflow" or whatever options exist)
                         // 4: Set CELL content and properties ==================================
                         strXml += `<a:tc${cellSpanAttrStr}>${genXmlTextBody(cell)}<a:tcPr${cellMarginXml}${cellValign}${cellTextDir}>`;
                         // strXml += `<a:tc${cellColspan}${cellRowspan}>${genXmlTextBody(cell)}<a:tcPr${cellMarginXml}${cellValign}${cellTextDir}>`
@@ -5350,7 +5414,9 @@ function slideObjectToXml(slide) {
                             ].forEach(obj => {
                                 if (cellOpts.border[obj.idx].type !== 'none') {
                                     strXml += `<a:${obj.name} w="${valToPts(cellOpts.border[obj.idx].pt)}" cap="flat" cmpd="sng" algn="ctr">`;
-                                    strXml += `<a:solidFill>${createColorElement(cellOpts.border[obj.idx].color)}</a:solidFill>`;
+                                    strXml += `<a:solidFill>${createColorElement(cellOpts.border[obj.idx].color, cellOpts.border[obj.idx].transparency
+                                        ? `<a:alpha val="${Math.round((100 - cellOpts.border[obj.idx].transparency) * 1000)}"/>`
+                                        : '')}</a:solidFill>`;
                                     strXml += `<a:prstDash val="${cellOpts.border[obj.idx].type === 'dash' ? 'sysDash' : 'solid'}"/><a:round/><a:headEnd type="none" w="med" len="med"/><a:tailEnd type="none" w="med" len="med"/>`;
                                     strXml += `</a:${obj.name}>`;
                                 }
@@ -5493,19 +5559,27 @@ function slideObjectToXml(slide) {
                     // FUTURE: `endArrowSize` < a: headEnd type = "arrow" w = "lg" len = "lg" /> 'sm' | 'med' | 'lg'(values are 1 - 9, making a 3x3 grid of w / len possibilities)
                     strSlideXml += '</a:ln>';
                 }
-                // EFFECTS > SHADOW: REF: @see http://officeopenxml.com/drwSp-effects.php
-                if (slideItemObj.options.shadow && slideItemObj.options.shadow.type !== 'none') {
-                    slideItemObj.options.shadow.type = slideItemObj.options.shadow.type || 'outer';
-                    slideItemObj.options.shadow.blur = valToPts(slideItemObj.options.shadow.blur || 8);
-                    slideItemObj.options.shadow.offset = valToPts(slideItemObj.options.shadow.offset || 4);
-                    slideItemObj.options.shadow.angle = Math.round((slideItemObj.options.shadow.angle || 270) * 60000);
-                    slideItemObj.options.shadow.opacity = Math.round((slideItemObj.options.shadow.opacity || 0.75) * 100000);
-                    slideItemObj.options.shadow.color = slideItemObj.options.shadow.color || DEF_TEXT_SHADOW.color;
+                // EFFECTS: SHADOW / SOFT EDGE (REF: http://officeopenxml.com/drwSp-effects.php)
+                const hasShadow = slideItemObj.options.shadow && slideItemObj.options.shadow.type !== 'none';
+                const softEdgeRadius = typeof ((_g = slideItemObj.options.softEdge) === null || _g === void 0 ? void 0 : _g.radius) === 'number' ? slideItemObj.options.softEdge.radius : 0;
+                const hasSoftEdge = softEdgeRadius > 0;
+                if (hasShadow || hasSoftEdge) {
                     strSlideXml += '<a:effectLst>';
-                    strSlideXml += ` <a:${slideItemObj.options.shadow.type}Shdw ${slideItemObj.options.shadow.type === 'outer' ? 'sx="100000" sy="100000" kx="0" ky="0" algn="bl" rotWithShape="0"' : ''} blurRad="${slideItemObj.options.shadow.blur}" dist="${slideItemObj.options.shadow.offset}" dir="${slideItemObj.options.shadow.angle}">`;
-                    strSlideXml += ` <a:srgbClr val="${slideItemObj.options.shadow.color}">`;
-                    strSlideXml += ` <a:alpha val="${slideItemObj.options.shadow.opacity}"/></a:srgbClr>`;
-                    strSlideXml += ' </a:outerShdw>';
+                    if (hasShadow) {
+                        slideItemObj.options.shadow.type = slideItemObj.options.shadow.type || 'outer';
+                        slideItemObj.options.shadow.blur = valToPts(slideItemObj.options.shadow.blur || 8);
+                        slideItemObj.options.shadow.offset = valToPts(slideItemObj.options.shadow.offset || 4);
+                        slideItemObj.options.shadow.angle = Math.round((slideItemObj.options.shadow.angle || 270) * 60000);
+                        slideItemObj.options.shadow.opacity = Math.round((slideItemObj.options.shadow.opacity || 0.75) * 100000);
+                        slideItemObj.options.shadow.color = slideItemObj.options.shadow.color || DEF_TEXT_SHADOW.color;
+                        strSlideXml += ` <a:${slideItemObj.options.shadow.type}Shdw ${slideItemObj.options.shadow.type === 'outer' ? 'sx="100000" sy="100000" kx="0" ky="0" algn="bl" rotWithShape="0"' : ''} blurRad="${slideItemObj.options.shadow.blur}" dist="${slideItemObj.options.shadow.offset}" dir="${slideItemObj.options.shadow.angle}">`;
+                        strSlideXml += ` <a:srgbClr val="${slideItemObj.options.shadow.color}">`;
+                        strSlideXml += ` <a:alpha val="${slideItemObj.options.shadow.opacity}"/></a:srgbClr>`;
+                        strSlideXml += ' </a:outerShdw>';
+                    }
+                    if (hasSoftEdge) {
+                        strSlideXml += `<a:softEdge rad="${valToPts(softEdgeRadius)}"/>`;
+                    }
                     strSlideXml += '</a:effectLst>';
                 }
                 /* TODO: FUTURE: Text wrapping (copied from MS-PPTX export)
@@ -5529,10 +5603,10 @@ function slideObjectToXml(slide) {
                 strSlideXml += '<p:pic>';
                 strSlideXml += '  <p:nvPicPr>';
                 strSlideXml += `<p:cNvPr id="${idx + 2}" name="${slideItemObj.options.objectName}" descr="${encodeXmlEntities(slideItemObj.options.altText || slideItemObj.image)}">`;
-                if ((_g = slideItemObj.hyperlink) === null || _g === void 0 ? void 0 : _g.url) {
+                if ((_h = slideItemObj.hyperlink) === null || _h === void 0 ? void 0 : _h.url) {
                     strSlideXml += `<a:hlinkClick r:id="rId${slideItemObj.hyperlink._rId}" tooltip="${slideItemObj.hyperlink.tooltip ? encodeXmlEntities(slideItemObj.hyperlink.tooltip) : ''}"/>`;
                 }
-                if ((_h = slideItemObj.hyperlink) === null || _h === void 0 ? void 0 : _h.slide) {
+                if ((_j = slideItemObj.hyperlink) === null || _j === void 0 ? void 0 : _j.slide) {
                     strSlideXml += `<a:hlinkClick r:id="rId${slideItemObj.hyperlink._rId}" tooltip="${slideItemObj.hyperlink.tooltip ? encodeXmlEntities(slideItemObj.hyperlink.tooltip) : ''}" action="ppaction://hlinksldjump"/>`;
                 }
                 strSlideXml += '    </p:cNvPr>';
@@ -5721,6 +5795,30 @@ function slideObjectToXml(slide) {
     strSlideXml += '</p:cSld>';
     // LAST: Return
     return strSlideXml;
+}
+/**
+ * Generate slide timing XML for embedded media playback.
+ * PowerPoint uses `delay="0"` for autoplay and `delay="indefinite"` for click-to-play.
+ */
+function genMediaTimingXml(slide) {
+    const autoplayMedia = slide._slideObjects.filter(item => item._type === SLIDE_OBJECT_TYPES.media && item.mediaAutoplay && item.mediaRid != null && item.mtype !== 'online');
+    if (autoplayMedia.length === 0)
+        return '';
+    let nextCtnId = 2;
+    const mediaXml = autoplayMedia
+        .map(item => {
+        const mediaTag = item.mtype === 'audio' ? 'audio' : 'video';
+        const shapeId = item.mediaRid + 2;
+        return (`<p:${mediaTag}><p:cMediaNode vol="80000">` +
+            `<p:cTn id="${nextCtnId++}" fill="hold" display="0"><p:stCondLst><p:cond delay="0"/></p:stCondLst></p:cTn>` +
+            `<p:tgtEl><p:spTgt spid="${shapeId}"/></p:tgtEl>` +
+            `</p:cMediaNode></p:${mediaTag}>`);
+    })
+        .join('');
+    return ('<p:timing><p:tnLst><p:par>' +
+        '<p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot">' +
+        `<p:childTnLst>${mediaXml}</p:childTnLst>` +
+        '</p:cTn></p:par></p:tnLst></p:timing>');
 }
 /**
  * Transforms slide relations to XML string.
@@ -5948,10 +6046,20 @@ function genXmlTextRunProperties(opts, isDefault) {
     // Color / Font / Highlight / Outline are children of <a:rPr>, so add them now before closing the runProperties tag
     if (opts.color || opts.fontFace || opts.outline || (typeof opts.underline === 'object' && opts.underline.color)) {
         if (opts.outline && typeof opts.outline === 'object') {
-            runProps += `<a:ln w="${valToPts(opts.outline.size || 0.75)}">${genXmlColorSelection(opts.outline.color || 'FFFFFF')}</a:ln>`;
+            runProps += `<a:ln w="${valToPts(opts.outline.size || 0.75)}">${genXmlColorSelection({
+                color: opts.outline.color || 'FFFFFF',
+                transparency: opts.outline.transparency,
+            })}</a:ln>`;
         }
-        if (opts.color)
-            runProps += genXmlColorSelection({ color: opts.color, transparency: opts.transparency });
+        if (opts.color) {
+            if (typeof opts.color === 'string') {
+                runProps += genXmlColorSelection({ color: opts.color, transparency: opts.transparency });
+            }
+            else {
+                // @ts-ignore
+                runProps += genXmlColorSelection(opts.color);
+            }
+        }
         if (opts.highlight)
             runProps += `<a:highlight>${createColorElement(opts.highlight)}</a:highlight>`;
         if (typeof opts.underline === 'object' && opts.underline.color)
@@ -6031,6 +6139,7 @@ function genXmlTextRun(textObj) {
  * @return {string} XML string
  */
 function genXmlBodyProperties(slideObject) {
+    var _a;
     let bodyProperties = '<a:bodyPr';
     if (slideObject && slideObject._type === SLIDE_OBJECT_TYPES.text && slideObject.options._bodyProp) {
         // PPT-2019 EX: <a:bodyPr wrap="square" lIns="1270" tIns="1270" rIns="1270" bIns="1270" rtlCol="0" anchor="ctr"/>
@@ -6087,8 +6196,16 @@ function genXmlBodyProperties(slideObject) {
         bodyProperties += ' wrap="square" rtlCol="0">';
         bodyProperties += '</a:bodyPr>';
     }
-    // LAST: Return Close _bodyProp
-    return slideObject._type === SLIDE_OBJECT_TYPES.tablecell ? '<a:bodyPr/>' : bodyProperties;
+    // Table cells: emit wrap (wrap="none" turns off shape-style wrapping in the cell text body)
+    if (slideObject._type === SLIDE_OBJECT_TYPES.tablecell) {
+        const cellOpts = slideObject.options || {};
+        const rawBodyWrap = (_a = cellOpts._bodyProp) === null || _a === void 0 ? void 0 : _a.wrap;
+        const bodyWrap = typeof rawBodyWrap === 'boolean' ? rawBodyWrap : null;
+        const useWrap = bodyWrap !== null ? bodyWrap : typeof cellOpts.wrap === 'boolean' ? cellOpts.wrap : true;
+        const wrapVal = useWrap ? 'square' : 'none';
+        return `<a:bodyPr wrap="${wrapVal}" rtlCol="0"></a:bodyPr>`;
+    }
+    return bodyProperties;
 }
 /**
  * Generate the XML for text and its options (bold, bullet, etc) including text runs (word-level formatting)
@@ -6497,6 +6614,7 @@ function makeXmlSlide(slide) {
         'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"' +
         `${(slide === null || slide === void 0 ? void 0 : slide.hidden) ? ' show="0"' : ''}>` +
         `${slideObjectToXml(slide)}` +
+        `${genMediaTimingXml(slide)}` +
         '<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>');
 }
 /**

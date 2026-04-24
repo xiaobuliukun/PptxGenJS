@@ -687,6 +687,11 @@ export interface MediaProps extends PositionProps, DataOrPathProps, ObjectNamePr
 	 */
 	link?: string
 	/**
+	 * Start audio/video automatically when the slide appears (embeds slide `p:timing`; not for `online` type)
+	 * @default false
+	 */
+	autoplay?: boolean
+	/**
 	 * full or local path
 	 * @example 'https://freesounds/simpsons/bart.mp3' // embed mp3 audio clip from server
 	 * @example '/sounds/simpsons_haha.mp3' // embed mp3 audio clip from local directory
@@ -937,6 +942,11 @@ export interface TableCellProps extends TextBaseProps {
 	 * Cell rowspan
 	 */
 	rowspan?: number
+	/**
+	 * Text wrap in cell (`wrap: false` maps to DrawingML `wrap="none"`)
+	 * @default true
+	 */
+	wrap?: boolean
 }
 export interface TableProps extends PositionProps, TextBaseProps, ObjectNameProps {
 	_arrObjTabHeadRows?: TableRow[]
@@ -1017,6 +1027,11 @@ export interface TableProps extends PositionProps, TextBaseProps, ObjectNameProp
 	 * @default rows of equal height based upon `h`
 	 */
 	rowH?: number | number[]
+	/**
+	 * Default text wrap for cells (per-cell `wrap` overrides)
+	 * @default true
+	 */
+	wrap?: boolean
 	/**
 	 * DEV TOOL: Verbose Mode (to console)
 	 * - tell the library to provide an almost ridiculous amount of detail during auto-paging calculations
@@ -1776,6 +1791,8 @@ export interface ISlideObject {
 	media?: string
 	mtype?: MediaType
 	mediaRid?: number
+	/** When true, slide XML includes timing so media plays on slide show (see `MediaProps.autoplay`) */
+	mediaAutoplay?: boolean
 	shape?: SHAPE_NAME
 }
 // PRIVATE ^^^

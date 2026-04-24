@@ -302,6 +302,7 @@ function slideObjectToXml (slide: PresSlide | SlideLayout): string {
 						;['align', 'bold', 'border', 'color', 'fill', 'fontFace', 'fontSize', 'margin', 'textDirection', 'underline', 'valign'].forEach(name => {
 							if (objTabOpts[name] && !cellOpts[name] && cellOpts[name] !== 0) cellOpts[name] = objTabOpts[name]
 						})
+						if (typeof cellOpts.wrap !== 'boolean' && typeof objTabOpts.wrap === 'boolean') cellOpts.wrap = objTabOpts.wrap
 
 						const cellValign = cellOpts.valign
 							? ` anchor="${cellOpts.valign.replace(/^c$/i, 'ctr').replace(/^m$/i, 'ctr').replace('center', 'ctr').replace('middle', 'ctr').replace('top', 't').replace('btm', 'b').replace('bottom', 'b')}"`
@@ -333,8 +334,6 @@ function slideObjectToXml (slide: PresSlide | SlideLayout): string {
 								cellMargin[2]
 							)}"`
 						}
-
-						// FUTURE: Cell NOWRAP property (textwrap: add to a:tcPr (horzOverflow="overflow" or whatever options exist)
 
 						// 4: Set CELL content and properties ==================================
 						strXml += `<a:tc${cellSpanAttrStr}>${genXmlTextBody(cell)}<a:tcPr${cellMarginXml}${cellValign}${cellTextDir}>`
@@ -770,6 +769,38 @@ function slideObjectToXml (slide: PresSlide | SlideLayout): string {
 }
 
 /**
+ * Generate slide timing XML for embedded media playback.
+ * PowerPoint uses `delay="0"` for autoplay and `delay="indefinite"` for click-to-play.
+ */
+function genMediaTimingXml (slide: PresSlide): string {
+	const autoplayMedia = slide._slideObjects.filter(
+		item => item._type === SLIDE_OBJECT_TYPES.media && item.mediaAutoplay && item.mediaRid != null && item.mtype !== 'online'
+	)
+	if (autoplayMedia.length === 0) return ''
+
+	let nextCtnId = 2
+	const mediaXml = autoplayMedia
+		.map(item => {
+			const mediaTag = item.mtype === 'audio' ? 'audio' : 'video'
+			const shapeId = item.mediaRid + 2
+			return (
+				`<p:${mediaTag}><p:cMediaNode vol="80000">` +
+				`<p:cTn id="${nextCtnId++}" fill="hold" display="0"><p:stCondLst><p:cond delay="0"/></p:stCondLst></p:cTn>` +
+				`<p:tgtEl><p:spTgt spid="${shapeId}"/></p:tgtEl>` +
+				`</p:cMediaNode></p:${mediaTag}>`
+			)
+		})
+		.join('')
+
+	return (
+		'<p:timing><p:tnLst><p:par>' +
+		'<p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot">' +
+		`<p:childTnLst>${mediaXml}</p:childTnLst>` +
+		'</p:cTn></p:par></p:tnLst></p:timing>'
+	)
+}
+
+/**
  * Transforms slide relations to XML string.
  * Extra relations that are not dynamic can be passed using the 2nd arg (e.g. theme relation in master file).
  * These relations use rId series that starts with 1-increased maximum of rIds used for dynamic relations.
@@ -1148,8 +1179,17 @@ function genXmlBodyProperties (slideObject: ISlideObject | TableCell): string {
 		bodyProperties += '</a:bodyPr>'
 	}
 
-	// LAST: Return Close _bodyProp
-	return slideObject._type === SLIDE_OBJECT_TYPES.tablecell ? '<a:bodyPr/>' : bodyProperties
+	// Table cells: emit wrap (wrap="none" turns off shape-style wrapping in the cell text body)
+	if (slideObject._type === SLIDE_OBJECT_TYPES.tablecell) {
+		const cellOpts = slideObject.options || {}
+		const rawBodyWrap = (cellOpts as { _bodyProp?: { wrap?: boolean } })._bodyProp?.wrap
+		const bodyWrap = typeof rawBodyWrap === 'boolean' ? rawBodyWrap : null
+		const useWrap = bodyWrap !== null ? bodyWrap : typeof cellOpts.wrap === 'boolean' ? cellOpts.wrap : true
+		const wrapVal = useWrap ? 'square' : 'none'
+		return `<a:bodyPr wrap="${wrapVal}" rtlCol="0"></a:bodyPr>`
+	}
+
+	return bodyProperties
 }
 
 /**
@@ -1586,6 +1626,7 @@ export function makeXmlSlide (slide: PresSlide): string {
 		'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"' +
 		`${slide?.hidden ? ' show="0"' : ''}>` +
 		`${slideObjectToXml(slide)}` +
+		`${genMediaTimingXml(slide)}` +
 		'<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>'
 	)
 }

@@ -1008,6 +1008,79 @@ declare namespace PptxGenJS {
 		 */
 		radius?: number
 	}
+	export interface GradientStop {
+		/**
+		 * Position (percent)
+		 * - range: 0-100
+		 */
+		position: number
+		/**
+		 * Gradient stop color
+		 * - `HexColor` or `ThemeColor`
+		 * @example 'FF0000' // hex color (red)
+		 * @example pptx.SchemeColor.text1 // Theme color (Text1)
+		 */
+		color: Color
+		/**
+		 * Transparency (percent)
+		 * - range: 0-100
+		 * @default 0
+		 */
+		transparency?: number
+	}
+	interface BaseGradientShapeFillProps {
+		/**
+		 * Gradient stops
+		 * - Only used with linearGradient and pathGradient types
+		 */
+		stops: GradientStop[]
+		/**
+		 * Rotate with shape
+		 * @default true
+		 */
+		rotWithShape?: boolean
+		/**
+		 * Tile rectangle
+		 */
+		tileRect?: { t?: number, r?: number, b?: number, l?: number }
+		/**
+		 * Gradient flip direction
+		 * - Only used when tileRect is specified
+		 * @default 'none'
+		 */
+		flip?: 'none' | 'x' | 'xy' | 'y'
+	}
+	export interface LinearGradientShapeFillProps extends BaseGradientShapeFillProps {
+		/**
+		 * Linear gradient angle (degrees)
+		 * - range: 0-359
+		 * @default 0
+		 */
+		angle?: number
+		/**
+		 * Scaled
+		 * - `true` will scale the gradient with the object
+		 * @default false
+		 */
+		scaled?: boolean
+		/**
+		 * Fill type
+		 */
+		type: 'linearGradient'
+	}
+	export interface RadialGradientShapeFillProps extends BaseGradientShapeFillProps {
+		/**
+		 * Fill type
+		 */
+		type: 'radialGradient'
+		/**
+		 * Gradient style
+		 * - 'circle' (default): circular gradient
+		 * - 'ellipse': elliptical gradient (stretches with shape)
+		 * @default 'ellipse'
+		 */
+		style?: 'circle' | 'ellipse'
+	}
 	// used by: shape, table, text
 	export interface ShapeFillProps {
 		/**
@@ -1189,7 +1262,7 @@ declare namespace PptxGenJS {
 		 * @example 'FF0000' // hex color (red)
 		 * @example pptx.SchemeColor.text1 // Theme color (Text1)
 		 */
-		color?: Color
+		color?: Color | LinearGradientShapeFillProps | RadialGradientShapeFillProps
 		/**
 		 * Font face name
 		 * @example 'Arial' // Arial font
@@ -1435,6 +1508,11 @@ declare namespace PptxGenJS {
 		 * @example 'https://www.youtube.com/embed/Dph6ynRVyUc' // embed a youtube video
 		 */
 		link?: string
+		/**
+		 * Start audio/video when the slide appears (`p:timing` in slide XML; not for `online` type)
+		 * @default false
+		 */
+		autoplay?: boolean
 		/**
 		 * full or local path
 		 * @example 'https://freesounds/simpsons/bart.mp3' // embed mp3 audio clip from server
@@ -1686,6 +1764,11 @@ declare namespace PptxGenJS {
 		 * Cell rowspan
 		 */
 		rowspan?: number
+		/**
+		 * Text wrap in cell (`false` → DrawingML `wrap="none"`)
+		 * @default true
+		 */
+		wrap?: boolean
 	}
 	export interface TableProps extends PositionProps, TextBaseProps, ObjectNameProps {
 		//_arrObjTabHeadRows?: TableRow[]
@@ -1766,6 +1849,11 @@ declare namespace PptxGenJS {
 		 * @default rows of equal height based upon `h`
 		 */
 		rowH?: number | number[]
+		/**
+		 * Default text wrap for cells (per-cell `wrap` overrides)
+		 * @default true
+		 */
+		wrap?: boolean
 		/**
 		 * DEV TOOL: Verbose Mode (to console)
 		 * - tell the library to provide an almost ridiculous amount of detail during auto-paging calculations
@@ -2423,7 +2511,7 @@ declare namespace PptxGenJS {
 		IChartPropsDataLabel,
 		IChartPropsDataTable,
 		IChartPropsLegend,
-		IChartPropsTitle,
+		Omit<IChartPropsTitle, 'color'>,
 		ObjectNameProps,
 		OptsChartGridLine,
 		PositionProps {
