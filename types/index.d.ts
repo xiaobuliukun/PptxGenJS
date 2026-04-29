@@ -106,6 +106,12 @@ declare class PptxGenJS {
 	 */
 	writeFile(props?: PptxGenJS.WriteFileProps): Promise<string>
 	/**
+	 * Embed a font family into the presentation so editable text can use it on machines where the font is not installed.
+	 * @param {EmbeddedFontProps} props font family and binary face data
+	 * @returns {PptxGenJS} this presentation
+	 */
+	embedFont(props: PptxGenJS.EmbeddedFontProps): PptxGenJS
+	/**
 	 * Add a new Section to Presentation
 	 * @param {SectionProps} props section properties
 	 * @example pptx.addSection({ title:'Charts' });
@@ -1382,6 +1388,43 @@ declare namespace PptxGenJS {
 		 * @default 'Calibri'
 		 */
 		bodyFontFace?: string
+	}
+	export type EmbeddedFontFaceName = 'regular' | 'bold' | 'italic' | 'boldItalic'
+	export type EmbeddedFontData = string | ArrayBuffer | Uint8Array | Blob
+	export type EmbeddedFontFaceInput = EmbeddedFontData | { data: EmbeddedFontData }
+	export interface EmbeddedFontProps {
+		/**
+		 * Font face family name used by PowerPoint.
+		 * This must match the text `fontFace` value used in slides.
+		 * @example 'Inter'
+		 */
+		typeface: string
+		/**
+		 * Font face data for regular text. Accepts raw binary data or a base64/data URI string.
+		 */
+		regular?: EmbeddedFontFaceInput
+		/**
+		 * Font face data for bold text. Accepts raw binary data or a base64/data URI string.
+		 */
+		bold?: EmbeddedFontFaceInput
+		/**
+		 * Font face data for italic text. Accepts raw binary data or a base64/data URI string.
+		 */
+		italic?: EmbeddedFontFaceInput
+		/**
+		 * Font face data for bold italic text. Accepts raw binary data or a base64/data URI string.
+		 */
+		boldItalic?: EmbeddedFontFaceInput
+		/**
+		 * PowerPoint font pitch family metadata.
+		 * @default 34
+		 */
+		pitchFamily?: number
+		/**
+		 * PowerPoint font charset metadata.
+		 * @default 0
+		 */
+		charset?: number
 	}
 
 	// image / media ==================================================================================

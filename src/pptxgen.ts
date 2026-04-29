@@ -79,6 +79,12 @@ import {
 } from './core-enums'
 import {
 	AddSlideProps,
+	EmbeddedFont,
+	EmbeddedFontData,
+	EmbeddedFontFace,
+	EmbeddedFontFaceInput,
+	EmbeddedFontFaceName,
+	EmbeddedFontProps,
 	IPresentationProps,
 	PresLayout,
 	PresSlide,
@@ -99,6 +105,7 @@ import * as genTable from './gen-tables'
 import * as genXml from './gen-xml'
 
 const VERSION = '4.0.1'
+const EMBEDDED_FONT_FACE_NAMES: EmbeddedFontFaceName[] = ['regular', 'bold', 'italic', 'boldItalic']
 
 export default class PptxGenJS implements IPresentationProps {
 	// Property getters/setters
@@ -249,6 +256,12 @@ export default class PptxGenJS implements IPresentationProps {
 		return this._slideLayouts
 	}
 
+	/** embedded font definitions */
+	private readonly _embeddedFonts: EmbeddedFont[]
+	public get embeddedFonts(): EmbeddedFont[] {
+		return this._embeddedFonts
+	}
+
 	private LAYOUTS: { [key: string]: PresLayout }
 
 	// Exposed class props
@@ -356,6 +369,7 @@ export default class PptxGenJS implements IPresentationProps {
 		]
 		this._slides = []
 		this._sections = []
+		this._embeddedFonts = []
 		this._masterSlide = {
 			addChart: null,
 			addImage: null,
@@ -439,6 +453,49 @@ export default class PptxGenJS implements IPresentationProps {
 		})
 	}
 
+	private readonly getEmbeddedFontRelCount = (): number => {
+		return this.embeddedFonts.reduce((count, font) => {
+			return count + EMBEDDED_FONT_FACE_NAMES.filter(faceName => font[faceName]).length
+		}, 0)
+	}
+
+	private readonly getEmbeddedFontFaceData = (faceInput: EmbeddedFontFaceInput): EmbeddedFontData => {
+		const isDataWrapper =
+			typeof faceInput === 'object' &&
+			faceInput !== null &&
+			'data' in faceInput &&
+			!(faceInput instanceof ArrayBuffer) &&
+			!(faceInput instanceof Uint8Array) &&
+			(typeof Blob === 'undefined' || !(faceInput instanceof Blob))
+
+		return isDataWrapper ? faceInput.data : faceInput as EmbeddedFontData
+	}
+
+	private readonly normalizeEmbeddedFontFace = (faceInput: EmbeddedFontFaceInput, relNumber: number): EmbeddedFontFace => {
+		return {
+			data: this.getEmbeddedFontFaceData(faceInput),
+			rId: `rIdFont${relNumber}`,
+			target: `fonts/font${relNumber}.ttf`,
+		}
+	}
+
+	private readonly addEmbeddedFontsToZip = (zip: JSZip): void => {
+		if (this.embeddedFonts.length === 0) return
+		zip.folder('ppt/fonts')
+		this.embeddedFonts.forEach(font => {
+			EMBEDDED_FONT_FACE_NAMES.forEach(faceName => {
+				const face = font[faceName]
+				if (!face) return
+				if (typeof face.data === 'string') {
+					const data = face.data.includes(',') ? face.data.split(',').pop() : face.data
+					zip.file(`ppt/${face.target}`, data, { base64: true })
+				} else {
+					zip.file(`ppt/${face.target}`, face.data)
+				}
+			})
+		})
+	}
+
 	/**
 	 * Create and export the .pptx file
 	 * @param {string} exportName - output file type
@@ -503,6 +560,7 @@ export default class PptxGenJS implements IPresentationProps {
 			zip.folder('ppt').folder('_rels')
 			zip.folder('ppt/charts').folder('_rels')
 			zip.folder('ppt/embeddings')
+			zip.folder('ppt/fonts')
 			zip.folder('ppt/media')
 			zip.folder('ppt/slideLayouts').folder('_rels')
 			zip.folder('ppt/slideMasters').folder('_rels')
@@ -510,11 +568,11 @@ export default class PptxGenJS implements IPresentationProps {
 			zip.folder('ppt/theme')
 			zip.folder('ppt/notesMasters').folder('_rels')
 			zip.folder('ppt/notesSlides').folder('_rels')
-			zip.file('[Content_Types].xml', genXml.makeXmlContTypes(this.slides, this.slideLayouts, this.masterSlide)) // TODO: pass only `this` like below! 20200206
+			zip.file('[Content_Types].xml', genXml.makeXmlContTypes(this.slides, this.slideLayouts, this.masterSlide, this.embeddedFonts)) // TODO: pass only `this` like below! 20200206
 			zip.file('_rels/.rels', genXml.makeXmlRootRels())
 			zip.file('docProps/app.xml', genXml.makeXmlApp(this.slides, this.company)) // TODO: pass only `this` like below! 20200206
 			zip.file('docProps/core.xml', genXml.makeXmlCore(this.title, this.subject, this.author, this.revision)) // TODO: pass only `this` like below! 20200206
-			zip.file('ppt/_rels/presentation.xml.rels', genXml.makeXmlPresentationRels(this.slides))
+			zip.file('ppt/_rels/presentation.xml.rels', genXml.makeXmlPresentationRels(this.slides, this.embeddedFonts))
 			zip.file('ppt/theme/theme1.xml', genXml.makeXmlTheme(this))
 			zip.file('ppt/presentation.xml', genXml.makeXmlPresentation(this))
 			zip.file('ppt/presProps.xml', genXml.makeXmlPresProps())
@@ -546,6 +604,7 @@ export default class PptxGenJS implements IPresentationProps {
 				this.createChartMediaRels(slide, zip, arrChartPromises)
 			})
 			this.createChartMediaRels(this.masterSlide, zip, arrChartPromises)
+			this.addEmbeddedFontsToZip(zip)
 
 			// E: Wait for Promises (if any) then generate the PPTX file
 			return await Promise.all(arrChartPromises).then(async () => {
@@ -631,6 +690,37 @@ export default class PptxGenJS implements IPresentationProps {
 	}
 
 	// PRESENTATION METHODS
+
+	/**
+	 * Embed a font family into the presentation so editable text can use it on machines where the font is not installed.
+	 * @param {EmbeddedFontProps} props - font family and binary face data
+	 * @returns {PptxGenJS} this presentation
+	 */
+	embedFont(props: EmbeddedFontProps): PptxGenJS {
+		if (!props) throw new Error('embedFont requires an argument')
+		if (!props.typeface) throw new Error('embedFont requires a `typeface` value')
+
+		let relNumber = this.getEmbeddedFontRelCount()
+		const embeddedFont: EmbeddedFont = {
+			typeface: props.typeface,
+			pitchFamily: props.pitchFamily,
+			charset: props.charset,
+		}
+
+		EMBEDDED_FONT_FACE_NAMES.forEach(faceName => {
+			const faceInput = props[faceName]
+			if (!faceInput) return
+			relNumber++
+			embeddedFont[faceName] = this.normalizeEmbeddedFontFace(faceInput, relNumber)
+		})
+
+		if (!EMBEDDED_FONT_FACE_NAMES.some(faceName => embeddedFont[faceName])) {
+			throw new Error('embedFont requires at least one font face: regular, bold, italic, or boldItalic')
+		}
+
+		this._embeddedFonts.push(embeddedFont)
+		return this
+	}
 
 	/**
 	 * Add a new Section to Presentation

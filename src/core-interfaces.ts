@@ -562,6 +562,61 @@ export interface ThemeProps {
 	bodyFontFace?: string
 }
 
+export type EmbeddedFontFaceName = 'regular' | 'bold' | 'italic' | 'boldItalic'
+export type EmbeddedFontData = string | ArrayBuffer | Uint8Array | Blob
+export type EmbeddedFontFaceInput = EmbeddedFontData | { data: EmbeddedFontData }
+
+export interface EmbeddedFontProps {
+	/**
+	 * Font face family name used by PowerPoint.
+	 * This must match the text `fontFace` value used in slides.
+	 * @example 'Inter'
+	 */
+	typeface: string
+	/**
+	 * Font face data for regular text. Accepts raw binary data or a base64/data URI string.
+	 */
+	regular?: EmbeddedFontFaceInput
+	/**
+	 * Font face data for bold text. Accepts raw binary data or a base64/data URI string.
+	 */
+	bold?: EmbeddedFontFaceInput
+	/**
+	 * Font face data for italic text. Accepts raw binary data or a base64/data URI string.
+	 */
+	italic?: EmbeddedFontFaceInput
+	/**
+	 * Font face data for bold italic text. Accepts raw binary data or a base64/data URI string.
+	 */
+	boldItalic?: EmbeddedFontFaceInput
+	/**
+	 * PowerPoint font pitch family metadata.
+	 * @default 34
+	 */
+	pitchFamily?: number
+	/**
+	 * PowerPoint font charset metadata.
+	 * @default 0
+	 */
+	charset?: number
+}
+
+export interface EmbeddedFontFace {
+	data: EmbeddedFontData
+	rId: string
+	target: string
+}
+
+export interface EmbeddedFont {
+	typeface: string
+	pitchFamily?: number
+	charset?: number
+	regular?: EmbeddedFontFace
+	bold?: EmbeddedFontFace
+	italic?: EmbeddedFontFace
+	boldItalic?: EmbeddedFontFace
+}
+
 // image / media ==================================================================================
 export type MediaType = 'audio' | 'online' | 'video'
 
@@ -1982,6 +2037,7 @@ export interface PresentationProps {
 }
 // PRIVATE interface
 export interface IPresentationProps extends PresentationProps {
+	embeddedFonts: EmbeddedFont[]
 	sections: SectionProps[]
 	slideLayouts: SlideLayout[]
 	slides: PresSlide[]
